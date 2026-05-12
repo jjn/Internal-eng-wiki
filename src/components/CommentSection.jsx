@@ -1,5 +1,6 @@
-import { useState } from "react";
+import { useState, useRef } from "react";
 import { comments as initialComments } from "../data/comments";
+import { users } from "../data/users";
 
 function timeAgo(dateString) {
   const now = new Date("2026-05-11T15:00:00Z");
@@ -23,9 +24,80 @@ function getInitials(name) {
     .toUpperCase();
 }
 
+function renderCommentText(text) {
+  const parts = text.split(/(@\w+)/g);
+  return parts.map((part, i) => {
+    if (part.startsWith("@")) {
+      const username = part.slice(1);
+      const user = users.find((u) => u.username === username);
+      if (user) {
+        return (
+          <span key={`mention-${i}-${username}`} className="mention">
+            {part}
+          </span>
+        );
+      }
+    }
+    return <span key={`text-${i}`}>{part}</span>;
+  });
+}
+
 export default function CommentSection() {
   const [comments, setComments] = useState(initialComments);
   const [newComment, setNewComment] = useState("");
+  const [mentionQuery, setMentionQuery] = useState("");
+  const [showMentionDropdown, setShowMentionDropdown] = useState(false);
+  const [mentionStartIndex, setMentionStartIndex] = useState(-1);
+  const textareaRef = useRef(null);
+
+  const filteredUsers = users.filter(
+    (u) =>
+      u.username.toLowerCase().includes(mentionQuery.toLowerCase()) ||
+      u.name.toLowerCase().includes(mentionQuery.toLowerCase())
+  );
+
+  const handleTextareaChange = (e) => {
+    const value = e.target.value;
+    const cursorPos = e.target.selectionStart;
+    setNewComment(value);
+
+    const textBeforeCursor = value.slice(0, cursorPos);
+    const atIndex = textBeforeCursor.lastIndexOf("@");
+
+    if (atIndex !== -1) {
+      const afterAt = textBeforeCursor.slice(atIndex + 1);
+      if (!afterAt.includes(" ") && !afterAt.includes("\n")) {
+        setMentionQuery(afterAt);
+        setMentionStartIndex(atIndex);
+        setShowMentionDropdown(true);
+        return;
+      }
+    }
+
+    setShowMentionDropdown(false);
+    setMentionQuery("");
+    setMentionStartIndex(-1);
+  };
+
+  const handleMentionSelect = (user) => {
+    const textarea = textareaRef.current;
+    const cursorPos = textarea.selectionStart;
+    const before = newComment.slice(0, mentionStartIndex);
+    const after = newComment.slice(cursorPos);
+    const inserted = `@${user.username} `;
+    const updatedValue = before + inserted + after;
+
+    setNewComment(updatedValue);
+    setShowMentionDropdown(false);
+    setMentionQuery("");
+    setMentionStartIndex(-1);
+
+    setTimeout(() => {
+      textarea.focus();
+      const newCursorPos = before.length + inserted.length;
+      textarea.setSelectionRange(newCursorPos, newCursorPos);
+    }, 0);
+  };
 
   const handleSubmit = (e) => {
     e.preventDefault();
@@ -42,6 +114,7 @@ export default function CommentSection() {
 
     setComments([...comments, comment]);
     setNewComment("");
+    setShowMentionDropdown(false);
   };
 
   return (
@@ -63,7 +136,7 @@ export default function CommentSection() {
                 {timeAgo(comment.timestamp)}
               </span>
             </div>
-            <p className="comment-text">{comment.text}</p>
+            <p className="comment-text">{renderCommentText(comment.text)}</p>
           </div>
         </div>
       ))}
@@ -76,12 +149,38 @@ export default function CommentSection() {
           JK
         </div>
         <div style={{ flex: 1, display: "flex", flexDirection: "column", gap: "10px" }}>
-          <textarea
-            value={newComment}
-            onChange={(e) => setNewComment(e.target.value)}
-            placeholder="Leave a comment..."
-            rows={3}
-          />
+          <div className="mention-wrapper">
+            <textarea
+              ref={textareaRef}
+              value={newComment}
+              onChange={handleTextareaChange}
+              placeholder="Leave a comment... Type @ to mention a coworker"
+              rows={3}
+            />
+            {showMentionDropdown && filteredUsers.length > 0 && (
+              <ul className="mention-dropdown">
+                {filteredUsers.map((user) => (
+                  <li
+                    key={user.id}
+                    className="mention-dropdown-item"
+                    onMouseDown={(e) => {
+                      e.preventDefault();
+                      handleMentionSelect(user);
+                    }}
+                  >
+                    <span
+                      className="mention-dropdown-avatar"
+                      style={{ background: user.avatarColor }}
+                    >
+                      {getInitials(user.name)}
+                    </span>
+                    <span className="mention-dropdown-name">{user.name}</span>
+                    <span className="mention-dropdown-username">@{user.username}</span>
+                  </li>
+                ))}
+              </ul>
+            )}
+          </div>
           <div>
             <button
               type="submit"

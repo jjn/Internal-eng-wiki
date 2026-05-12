@@ -32,13 +32,13 @@ function renderCommentText(text) {
       const user = users.find((u) => u.username === username);
       if (user) {
         return (
-          <span key={i} className="mention">
+          <span key={`mention-${i}-${username}`} className="mention">
             {part}
           </span>
         );
       }
     }
-    return part;
+    return <span key={`text-${i}`}>{part}</span>;
   });
 }
 
